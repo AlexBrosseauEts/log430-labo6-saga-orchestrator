@@ -39,9 +39,6 @@ class OrderSagaController(Controller):
             elif self.current_saga_state == OrderSagaState.CREATING_PAYMENT:
                 self.current_saga_state = self.create_payment_handler.run()
 
-            elif self.current_saga_state == OrderSagaState.CANCELLING_PAYMENT:
-                self.current_saga_state = self.create_payment_handler.rollback()
-
             elif self.current_saga_state == OrderSagaState.INCREASING_STOCK:
                 self.current_saga_state = self.decrease_stock_handler.rollback()
 
