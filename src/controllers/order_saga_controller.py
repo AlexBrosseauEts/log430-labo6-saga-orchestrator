@@ -49,21 +49,22 @@ class OrderSagaController(Controller):
                 })
                 self.current_saga_state = self.payment_handler.run()
 
-            # ==== Chemin rollback ====
-
-            elif self.current_saga_state == OrderSagaState.CANCELLING_PAYMENT:
-                if self.payment_handler:
-                    self.payment_handler.rollback()
-                self.current_saga_state = OrderSagaState.CANCELLING_STOCK
-
-            elif self.current_saga_state == OrderSagaState.CANCELLING_STOCK:
-                if self.stock_handler:
-                    self.stock_handler.rollback()
-                self.current_saga_state = OrderSagaState.CANCELLING_ORDER
-
             elif self.current_saga_state == OrderSagaState.CANCELLING_ORDER:
-                if self.create_order_handler:
-                    self.create_order_handler.rollback()
+                try:
+                    if self.payment_handler:
+                        self.payment_handler.rollback()
+                except Exception:
+                    self.logger.debug("rollback payment a échoué (ignoré pour continuer la compensation)")
+                try:
+                    if self.stock_handler:
+                        self.stock_handler.rollback()
+                except Exception:
+                    self.logger.debug("rollback stock a échoué (ignoré pour continuer la compensation)")
+                try:
+                    if self.create_order_handler:
+                        self.create_order_handler.rollback()
+                except Exception:
+                    self.logger.debug("rollback order a échoué (on termine quand même)")
                 self.is_error_occurred = True
                 self.current_saga_state = OrderSagaState.COMPLETED
 
