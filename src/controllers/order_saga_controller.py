@@ -22,61 +22,58 @@ class OrderSagaController(Controller):
         self.current_saga_state = OrderSagaState.CREATING_ORDER
     
     def run(self, request):
-    payload = request.get_json() or {}
-    order_data = {
-        "user_id": payload.get('user_id'),
-        "items": payload.get('items', [])
-    }
+        payload = request.get_json() or {}
+        order_data = {
+            "user_id": payload.get('user_id'),
+            "items": payload.get('items', [])
+        }
 
-    self.is_error_occurred = False
-    self.create_order_handler = CreateOrderHandler(order_data)
-    self.stock_handler = None
-    self.payment_handler = None
+        self.is_error_occurred = False
+        self.create_order_handler = CreateOrderHandler(order_data)
+        self.stock_handler = None
+        self.payment_handler = None
 
-    while self.current_saga_state is not OrderSagaState.COMPLETED:
+        while self.current_saga_state is not OrderSagaState.COMPLETED:
 
-        if self.current_saga_state == OrderSagaState.CREATING_ORDER:
-            self.current_saga_state = self.create_order_handler.run()
+            if self.current_saga_state == OrderSagaState.CREATING_ORDER:
+                self.current_saga_state = self.create_order_handler.run()
 
-        elif self.current_saga_state == OrderSagaState.DECREASING_STOCK:
-            self.stock_handler = DecreaseStockHandler(order_data["items"])
-            self.current_saga_state = self.stock_handler.run()
+            elif self.current_saga_state == OrderSagaState.DECREASING_STOCK:
+                self.stock_handler = DecreaseStockHandler(order_data["items"])
+                self.current_saga_state = self.stock_handler.run()
 
-        elif self.current_saga_state == OrderSagaState.CREATING_PAYMENT:
-            self.payment_handler = CreatePaymentHandler({
-                "order_id": self.create_order_handler.order_id,
-                "items": order_data["items"]
-            })
-            self.current_saga_state = self.payment_handler.run()
+            elif self.current_saga_state == OrderSagaState.CREATING_PAYMENT:
+                self.payment_handler = CreatePaymentHandler({
+                    "order_id": self.create_order_handler.order_id,
+                    "items": order_data["items"]
+                })
+                self.current_saga_state = self.payment_handler.run()
 
-        # ==== Chemin rollback ====
+            # ==== Chemin rollback ====
 
-        elif self.current_saga_state == OrderSagaState.CANCELLING_PAYMENT:
-            if self.payment_handler:
-                self.payment_handler.rollback()
-            self.current_saga_state = OrderSagaState.CANCELLING_STOCK
+            elif self.current_saga_state == OrderSagaState.CANCELLING_PAYMENT:
+                if self.payment_handler:
+                    self.payment_handler.rollback()
+                self.current_saga_state = OrderSagaState.CANCELLING_STOCK
 
-        elif self.current_saga_state == OrderSagaState.CANCELLING_STOCK:
-            if self.stock_handler:
-                self.stock_handler.rollback()
-            self.current_saga_state = OrderSagaState.CANCELLING_ORDER
+            elif self.current_saga_state == OrderSagaState.CANCELLING_STOCK:
+                if self.stock_handler:
+                    self.stock_handler.rollback()
+                self.current_saga_state = OrderSagaState.CANCELLING_ORDER
 
-        elif self.current_saga_state == OrderSagaState.CANCELLING_ORDER:
-            if self.create_order_handler:
-                self.create_order_handler.rollback()
-            self.is_error_occurred = True
-            self.current_saga_state = OrderSagaState.COMPLETED
+            elif self.current_saga_state == OrderSagaState.CANCELLING_ORDER:
+                if self.create_order_handler:
+                    self.create_order_handler.rollback()
+                self.is_error_occurred = True
+                self.current_saga_state = OrderSagaState.COMPLETED
 
-        else:
-            self.is_error_occurred = True
-            self.logger.debug(f"L'état saga n'est pas valide : {self.current_saga_state}")
-            self.current_saga_state = OrderSagaState.COMPLETED
+            else:
+                self.is_error_occurred = True
+                self.logger.debug(f"L'état saga n'est pas valide : {self.current_saga_state}")
+                self.current_saga_state = OrderSagaState.COMPLETED
 
-    return {
-        "order_id": self.create_order_handler.order_id,
-        "status": "OK" if not self.is_error_occurred else "Une erreur s'est produite lors de la création de la commande."
-    }
-
-
-
+        return {
+            "order_id": self.create_order_handler.order_id,
+            "status": "OK" if not self.is_error_occurred else "Une erreur s'est produite lors de la création de la commande."
+        }
     
