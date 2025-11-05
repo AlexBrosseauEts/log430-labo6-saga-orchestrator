@@ -43,12 +43,22 @@ class OrderSagaController(Controller):
                 self.current_saga_state = self.stock_handler.run()
 
             elif self.current_saga_state == OrderSagaState.CREATING_PAYMENT:
+                raw_total = payload.get("total_amount")
+                if raw_total is None:
+                    raw_total = sum((it or {}).get("quantity", 0) for it in order_data.get("items", [])) or 1
+                try:
+                    total_amount = float(raw_total)
+                    if total_amount <= 0:
+                        total_amount = 1.0
+                except Exception:
+                    total_amount = 1.0
+
                 payment_data = {
                     "order_id": self.create_order_handler.order_id,
-                    "amount": payload.get("total_amount"),
+                    "amount": total_amount,
                     "currency": payload.get("currency", "CAD"),
                     "method": payload.get("payment_method", "credit_card"),
-                    "items": order_data["items"],                     
+                    "items": order_data["items"],
                     "user_id": order_data.get("user_id"),
                 }
                 self.payment_handler = CreatePaymentHandler(payment_data)
