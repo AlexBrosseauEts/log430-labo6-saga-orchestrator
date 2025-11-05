@@ -8,7 +8,6 @@ import requests
 from handlers.handler import Handler
 from order_saga_state import OrderSagaState
 
-# On parle directement au microservice paiement (pas besoin de modifier KrakenD/Labo5)
 PAYMENT_API_URL = os.getenv("PAYMENT_API_URL", "http://payments_api:5009")
 
 class CreatePaymentHandler(Handler):
@@ -21,7 +20,7 @@ class CreatePaymentHandler(Handler):
         super().__init__()
 
     def run(self):
-        """Créer la transaction de paiement (via payments_api)"""
+        """Créer la transaction de paiement (appel direct au microservice paiement)"""
         try:
             payload = {
                 "order_id": self.order_data.get("order_id"),
@@ -37,7 +36,7 @@ class CreatePaymentHandler(Handler):
                 url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                timeout=10
+                timeout=12  # un peu plus long pour éviter les faux timeouts
             )
 
             if resp.status_code in (200, 201):
@@ -49,14 +48,15 @@ class CreatePaymentHandler(Handler):
                     self.payment_id = data.get("id") or data.get("payment_id")
                 self.logger.debug("La création du paiement a réussi")
                 return OrderSagaState.COMPLETED
-            else:
-                try:
-                    text = resp.json()
-                except Exception:
-                    text = resp.text
-                self.logger.error(f"[PAYMENT] Erreur {resp.status_code} : {text}")
-                self.logger.error(f"[PAYMENT DEBUG] URL={url} PAYLOAD={payload}")
-                return OrderSagaState.CANCELLING_ORDER
+
+            # -> échec côté paiement
+            try:
+                text = resp.json()
+            except Exception:
+                text = resp.text
+            self.logger.error(f"[PAYMENT] Erreur {resp.status_code} : {text}")
+            self.logger.error(f"[PAYMENT DEBUG] URL={url} PAYLOAD={payload}")
+            return OrderSagaState.CANCELLING_ORDER
 
         except Exception as e:
             self.logger.error("La création du paiement a échoué : " + str(e))
@@ -64,8 +64,8 @@ class CreatePaymentHandler(Handler):
 
     def rollback(self):
         """
-        Compensation paiement : il n'existe pas d'endpoint d'annulation dans ce microservice mock.
-        On journalise simplement et on poursuit la compensation des étapes précédentes.
+        Pas d’endpoint d’annulation exposé par ce microservice mock.
+        On journalise et on poursuit la compensation.
         """
         self.logger.debug("Aucun rollback paiement disponible (pas d'endpoint d'annulation).")
         return OrderSagaState.CANCELLING_ORDER
