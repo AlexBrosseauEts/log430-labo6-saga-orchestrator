@@ -43,11 +43,17 @@ class OrderSagaController(Controller):
                 self.current_saga_state = self.stock_handler.run()
 
             elif self.current_saga_state == OrderSagaState.CREATING_PAYMENT:
-                self.payment_handler = CreatePaymentHandler({
+                payment_data = {
                     "order_id": self.create_order_handler.order_id,
-                    "items": order_data["items"]
-                })
+                    "amount": payload.get("total_amount"),
+                    "currency": payload.get("currency", "CAD"),
+                    "method": payload.get("payment_method", "credit_card"),
+                    "items": order_data["items"],                     
+                    "user_id": order_data.get("user_id"),
+                }
+                self.payment_handler = CreatePaymentHandler(payment_data)
                 self.current_saga_state = self.payment_handler.run()
+
 
             elif self.current_saga_state == OrderSagaState.CANCELLING_ORDER:
                 try:
