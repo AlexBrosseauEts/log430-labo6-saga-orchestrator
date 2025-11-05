@@ -7,7 +7,8 @@ import config
 import requests
 from handlers.handler import Handler
 from order_saga_state import OrderSagaState
-
+API_GATEWAY_URL   = os.getenv("API_GATEWAY_URL",   "http://api-gateway:8080")
+STORE_MANAGER_URL = os.getenv("STORE_MANAGER_URL", "http://store_manager:5000")
 class DecreaseStockHandler(Handler):
     """Handle stock checkout. Trigger rollback in case of failure."""
 
