@@ -41,20 +41,26 @@ class CreateOrderHandler(Handler):
             return OrderSagaState.COMPLETED
         
     def rollback(self):
-        """Call StoreManager to delete order"""
-        try:
-            # ATTENTION: Si vous exécutez ce code dans Docker, n'utilisez pas localhost. Utilisez plutôt le hostname de votre API Gateway
-            response = requests.delete(f'{config.API_GATEWAY_URL}/store-manager-api/orders/{self.order_id}')
-            if response.ok:
-                data = response.json() 
-                self.order_id = data['order_id'] if data else 0
-                self.logger.debug("La supression de la commande a réussi")
-                return OrderSagaState.COMPLETED
-            else:
-                text = response.json() 
-                self.logger.error(f"Erreur {response.status_code} : {text}")
-                return OrderSagaState.COMPLETED
-
-        except Exception as e:
-            self.logger.error("La supression de la commande a échoué : " + str(e))
+    """Call StoreManager to delete order"""
+    try:
+        response = requests.delete(f'{config.API_GATEWAY_URL}/store-manager-api/orders/{self.order_id}')
+        if response.ok:
+            # Le DELETE peut ne rien renvoyer en JSON : ne pas forcer ['order_id']
+            try:
+                data = response.json()
+                # s'il y a un body, on le lit prudemment
+                self.order_id = data.get('order_id', self.order_id) if isinstance(data, dict) else self.order_id
+            except Exception:
+                pass  # pas de JSON, c'est OK
+            self.logger.debug("La supression de la commande a réussi")
             return OrderSagaState.COMPLETED
+        else:
+            try:
+                text = response.json()
+            except Exception:
+                text = response.text
+            self.logger.error(f"Erreur {response.status_code} : {text}")
+            return OrderSagaState.COMPLETED
+    except Exception as e:
+        self.logger.error("La supression de la commande a échoué : " + str(e))
+        return OrderSagaState.COMPLETED
